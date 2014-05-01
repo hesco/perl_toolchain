@@ -1,0 +1,544 @@
+
+ --- slide --- 
+
+This presentation is intended to share a couple of puppet 
+modules I created to manage the installation of the 
+development environment I run on my desktop in my home office.  
+
+perl_toolchain
+├── ci.msg
+├── docs
+│   └── Bootstrapping_perl_development_environment_in_20_minutes.txt
+├── files
+│   ├── etc
+│   │   ├── init.d
+│   │   │   ├── pintod
+│   │   │   ├── pintod.debian
+│   │   │   ├── pintod.debian.new
+│   │   │   └── pintod.puppet
+│   │   └── pinto
+│   │       └── htpasswd.starter
+│   └── root
+│       └── lib
+│           └── sh
+│               ├── pinto_install.sh
+│               └── pinto_install.sh.marcus
+├── manifests
+│   ├── app_pmuninstall.pp
+│   ├── app_sqitch.pp
+│   ├── carton.pp
+│   ├── cpanm
+│   │   └── install.pp
+│   ├── critic.pp
+│   ├── devel_cover.pp
+│   ├── devel_hdb.pp
+│   ├── init.pp
+│   ├── milla.pp
+│   ├── mojo.pp
+│   ├── perlbrew.pp
+│   ├── pinto.pp
+│   ├── plenv.pp
+│   ├── rex.pp
+│   └── test.pp
+├── Modulefile
+├── README.md
+├── spec
+│   └── spec_helper.rb
+└── tests
+    └── init.pp
+
+12 directories, 28 files
+
+ --- slide --- 
+
+and perhaps also, in the next iteration, these modules which are already working 
+in my home environment, but which have not been incorporated into the puppet 
+module published on github, nor yet into this presentation which I promised 
+someone would last only twenty minuites.  
+
+compass_sass
+drush
+fpm
+libcloud
+vagrant
+
+ --- slide --- 
+
+I first want to offer a nod to Al Newkirk (alnewkirk), whom I have never met, 
+but who shared a snippet of code on a gist, which got me started.  I give him 
+credit what works here, but I'll take responsibility for whatever bugs I may 
+have introduced here: 
+
+perl_toolchain/manifests/cpanm/install.pp
+
+# Our cpanm is actually a symlink to the pinto
+# installation.  See: perl_toolchain::pinto
+
+# Thanks to alnewkirk on #perl-help channel
+# http://pastie.org/8443394
+# usage:
+#   profile::utility::cpan { 'Dancer':
+#        using => 'cpanm',
+#       module => 'Dancer'
+#   }
+
+class perl_toolchain::cpanm::install {
+
+  # cpan dependency installation
+  define perl_toolchain::cpanm::install (
+    $using  = '/usr/bin/cpanm',
+    $perl   = '/usr/bin/perl',
+    $local  = '/opt/local',
+    $source = undef,
+    $module = undef
+  )
+  {
+    exec { "cpanm:${module}":
+      environment => "PERL5LIB=${local}/lib/perl5:$PERL5LIB",
+          command => "${using} -L ${local} ${module}",
+          onlyif  => "${perl} -e \"!eval q{require ${module}}?exit(0):exit(1)\""
+    }
+  }
+
+}
+
+ --- slide --- 
+
+That puppet function is used by these modules to install each 
+of the indicated modules and applications.  
+
+├── manifests
+│   ├── app_pmuninstall.pp
+│   ├── app_sqitch.pp
+│   ├── carton.pp
+│   ├── cpanm
+│   │   └── install.pp
+│   ├── critic.pp
+│   ├── devel_cover.pp
+│   ├── devel_hdb.pp
+│   ├── init.pp
+│   ├── milla.pp
+│   ├── mojo.pp
+│   ├── perlbrew.pp
+│   ├── pinto.pp
+│   ├── plenv.pp
+│   ├── rex.pp
+│   └── test.pp
+
+ --- slide --- 
+
+I develop my work here:
+
+/home/hesco/sandbox/marcus/puppet
+
+and use a shell script to run static lint and synatx checks as it gets 
+pushed to 
+
+/etc/puppet/modules/marcus/
+
+ --- slide --- 
+
+Now were I managing more than a dozen or two servers, I'd start to look 
+at using a real ENC, say Heira, but for the moment, for this particular 
+puppet installation on my home desktop, I offsite the work to a remote 
+git repo, but I run both master and client locally.  The configuration 
+on marcus, the keyboard where I work, looks like this:  
+
+/etc/puppet/puppet.conf -- 
+
+[main]
+modulepath = /etc/puppet/modules/$environment:/usr/share/puppet/modules
+etc.
+
+[master]
+etc.
+
+[marcus]
+modulepath = /etc/puppet/modules/marcus:/usr/share/puppet/modules
+
+[agent]
+server = marcus10.yourmessagedelivered.com
+environment=marcus
+
+/etc/puppet/manifests/site.pp -- 
+
+import 'nodes.pp'
+
+/etc/puppet/manifests/nodes.pp -- 
+
+node 'marcus10.yourmessagedelivered.com' { include marcus_init }
+
+/etc/puppet/modules/marcus/marcus_init/manifests/init.pp
+
+ --- slide --- 
+
+Focusing on just the development tools now managed with puppet:
+
+/etc/puppet/modules/marcus/marcus_init/manifests/init.pp -- 
+
+class marcus_init {
+
+  include puppet
+  include utilities::dev_utils
+  include utilities::vm_tools
+  include utilities::removed_packages
+  include git
+  include ymd_dev_env
+  include ymd_dev_env::bats
+  include ymd_dev_env::jshint
+  include ymd_dev_env::phantomjs
+  include ymd_dev_env::bluefish
+  include vagrant
+  include perl_toolchain // <-----
+  include libcloud
+  include drush
+  include fpm
+  include db_clients
+  include client1_dev_env
+  include client2_dev_env
+  include client3_dev_env
+  include compass_sass
+  // plus the office, entertainment and other 
+  // modules used to manage a primary home desktop.  
+
+}
+
+include marcus_init
+
+ --- slide --- 
+
+Again, everything depends on:
+
+cpanm::install.pp
+
+The next several slides review some perl specific tools 
+which I pull regularly from my tool kit.
+
+But first, these are tools which looked useful and which 
+I have successfully installed, but not used.  
+Perhaps others might fill us in on their feature sets.
+These are tools I found on cpan, or in Perl Weekly.  
+
+app_pmuninstall.pp
+milla.pp
+rex.pp
+
+I uninstalled this one in favor of plenv, 
+with which it conflicts.
+
+perlbrew.pp
+
+ --- slide --- 
+
+app_sqitch.pp
+
+Its author, David Wheeler, describes sqitch 
+as 'a database change management application'.
+
+I mangle the config a bit from this, 
+but here is what init does:
+
+$ sqitch init project_name
+
+Created sqitch.conf
+Created sqitch.plan
+Created deploy/
+Created revert/
+Created verify/
+
+ --- slide --- 
+
+sqitch understands these commands:
+
+       add
+       bundle
+       checkout
+       config
+       deploy
+       help
+       init
+       log
+       plan
+       rebase
+       checkout
+       revert
+       rework
+       status
+       show
+       tag
+
+ --- slide --- 
+
+This is the sql/ directory on my current project:
+
+$ tree -L 2 ../sql/
+../sql/
+├── mysql
+│   └── sqitch.plan
+├── pg
+│   ├── deploy
+│   ├── revert
+│   ├── sqitch.plan
+│   └── verify
+├── sqitch_
+├── sqitch.conf
+├── sqlite3
+│   ├── deploy
+│   ├── revert
+│   ├── sqitch.plan
+│   └── verify
+└── product_leads_dev
+
+* sqitch_ and product_leads_dev are sqlite3 databases.
+
+ --- slide --- 
+
+This is how I deploy schema changes -- 
+
+script/deploy_app.sh --
+
+function deploy_version_of_db () {
+
+  cd "$DEPLOY_DIR/sql"
+  /usr/bin/sudo -u hesco /usr/bin/perl -CAS -I/opt/local/sqitch/lib/perl5 /usr/bin/sqitch deploy app-$MODE
+  cd - 
+
+  export DB_TAG='db_tag not yet implemented'
+  return
+}
+
+ --- slide --- 
+
+It produces output like this:
+
+Adding registry tables to db:sqlite:sqitch_
+Deploying changes to sqlite-dev
+  + prospects ........................ ok
+  + list_types ....................... ok
+  + students ......................... ok
+  + states ........................... ok
+  + campus_types ..................... ok
+  + campus ........................... ok
+  + populate_states .................. ok
+  + populate_campus .................. ok
+  + populate_campus_types ............ ok
+  + campus_unsupported @v0.08 ........ ok
+
+ --- slide --- 
+
+The $db_engine/{deploy|revert|verify}/ directories are filled 
+with .sql files written in the native SQL dialect for each engine.
+
+$ cat pg/deploy/states.sql 
+-- Deploy states
+
+BEGIN;
+
+  CREATE TABLE states (
+    id serial UNIQUE, 
+    cdh_country_code integer, 
+    cdh_state_code integer UNIQUE,
+    country_code varchar(3),
+    state_code char(2),
+    state_name varchar(35),
+    iso3166_level_name varchar(25)
+  );
+
+COMMIT;
+
+ --- slide --- 
+
+$ cat pg/revert/states.sql 
+-- Revert states
+
+BEGIN;
+
+    DROP TABLE states;
+
+COMMIT;
+
+$ cat pg/verify/states.sql 
+-- Verify states
+
+BEGIN;
+
+    SELECT id, cdh_country_code, cdh_state_code, country_code, 
+        state_code, state_name, iso3166_level_name
+    FROM states
+    WHERE false;
+
+ROLLBACK;
+
+ --- slide --- 
+
+David Wheeler seemed to like the idea of converting the verify output 
+into TAP, but for the moment, here is what we get:  
+
+$ perl -CAS -I/opt/local/sqitch/lib/perl5 /usr/bin/sqitch verify
+Verifying tfc-dev
+  * list_types ................ ok
+  * prospects ................. ok
+  * states .................... ok
+  * populate_states ........... ok
+  * campus_types .............. ok
+  * populate_campus_types ..... ok
+  * campus .................... ok
+  * populate_campus ........... ok
+  * campus_unsupported ........ ok
+  * students @v0.08 ........... ok
+Verify successful
+
+ --- slide --- 
+
+carton.pp
+
+We have Tatsuhiko Miyagawa to thank for carton.  
+The author describes carton as 
+'Perl module dependency manager (aka Bundler for Perl)'
+
+ --- slide --- 
+
+This is how my current projecct uses carton, . . . 
+
+script/deploy_app.sh --
+
+function deploy_version_of_code () {
+
+  GIT=/usr/bin/git
+  # /bin/echo 'used to pull in the latest version, now let vcsrepo handle that'
+  /usr/bin/sudo -u hesco $GIT pull --tags origin master
+
+  MOST_RECENT_TAG=`/usr/bin/sudo -u hesco $GIT tag | /usr/bin/tail -n1`
+  MOST_RECENT_VERSION=`/usr/bin/sudo -u hesco $GIT log --oneline | sed "s,\ .*$,," | /usr/bin/head -n1`
+  
+  if [[ $DEPLOY_VERSION == '' ]]
+  then 
+        DEPLOY_VERSION=$MOST_RECENT_VERSION
+  elif [[ $DEPLOY_VERSION == 'stable' ]]
+  then 
+        DEPLOY_VERSION=$MOST_RECENT_TAG
+  fi
+  
+  # /bin/echo "vcsrepo should have deployed the version specified in the manifest "
+  # /bin/echo "but otherwise we are running git reset $DEPLOY_VERSION "
+  /usr/bin/sudo -u hesco $GIT reset $DEPLOY_VERSION
+  # /bin/echo "Deploying missing dependencies for app, version: $DEPLOY_VERSION "
+  /bin/chown hesco: -R local/
+  /usr/bin/sudo -u hesco /usr/bin/perl -I/opt/local/carton/lib/perl5 /usr/bin/carton install
+
+  export DEPLOY_VERSION="$DEPLOY_VERSION"
+  return
+}
+
+ --- slide --- 
+
+critic.pp
+
+With a tip of the hat to Jeffrey Ryan Thalhammer. 
+perl critic provides us with static code analysis for your perl code.  
+It started out as 'Critique Perl source code for best-practices', and 
+supports a PBP rule set which tracks Damian Conway's recommendations.  
+But it also allows you to implement other rules as suits your needs, 
+including adding your own plugins to account for rules not yet available 
+on cpan.  
+
+Our CI server gives us reports which look like this -- 
+
+POLICY THEME: t/static_code_analysis/complexity.sh
+
+ok 1        lib/App.pm source OK
+ok 2        lib/App/DB.pm source OK
+ok 3        lib/App/Email.pm source OK
+ok 4        lib/App/Example.pm source OK
+ok 5        lib/App/LandingPages.pm source OK
+ok 6        lib/App/Metrics.pm source OK
+
+ --- slide --- 
+
+The test suite includes a directory of files which look like this:
+
+$ cat t/static_code_analysis/complexity.sh 
+
+/opt/local/critic/bin/perlcritic \
+    --theme='complexity' \
+    --verbose '%p: %m at line %l\n%f\n%r\n' \
+    lib/ script/ t/
+
+$ ls t/static_code_analysis/
+bugs.sh        maintenance.sh  performance.sh      roles.sh     unicode.sh
+complexity.sh  moose.sh        portability.sh      security.sh
+core.sh.off    pbp.sh.off      readability.sh.off  tests.sh
+
+ --- slide --- 
+
+Sometimes I chose to ignore some issues just to complete the roll-out 
+of the static code tests, figuring I could circle round and clean 
+up these issues, if I later decided that that would add value to 
+the project.  
+
+t/static_code_analysis/maintenance.sh --
+
+/opt/local/critic/bin/perlcritic \
+    --theme='maintenance' \
+    --verbose '%p: %m at line %l\n%f\n%r\n' \
+    --exclude=RequireUseStrict \
+    --exclude=RequireExplicitPackage \
+    --exclude=RequirePodSections \
+    --exclude=RequirePodLinksIncludeText \
+    --exclude=RequireExtendedFormatting \
+    --exclude=ProhibitUselessNoCritic \
+    lib/ script/ 
+
+/opt/local/critic/bin/perlcritic \
+    --theme='maintenance' \
+    --verbose '%p: %m at line %l\n%f\n%r\n' \
+    --exclude=RequireUseStrict \
+    --exclude=RequireExplicitPackage \
+    --exclude=RequirePodSections \
+    --exclude=RequirePodLinksIncludeText \
+    --exclude=RequireExtendedFormatting \
+    --exclude=ProhibitMagicNumbers \
+    t/
+
+ --- slide --- 
+
+pinto.pp
+
+While we are acknowledging the work of Jeffrey Ryan Thalhammer. 
+I would be remiss were I to fail to draw your attention to pinto.  
+
+pinto provides the command line tools to sanely 
+'curate a repository of Perl modules' for a project, 
+avoiding dependency hell on deployments.  
+
+ --- slide --- 
+
+devel_cover.pp
+
+ --- slide --- 
+
+devel_hdb.pp
+
+ --- slide --- 
+
+init.pp
+
+ --- slide --- 
+
+mojo.pp
+
+ --- slide --- 
+
+plenv.pp
+
+ --- slide --- 
+
+test.pp
+
+
+ --- slide --- 
+
+
+ --- slide --- 
+
+
